@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Data;
@@ -21,8 +21,8 @@ namespace Map
     public partial class FormMain : Form
     {
         double corX, corY;
-        string nameTech;
-        int quantity, x, y;
+        int x, y;
+        PointLatLng p;
         List<Points> point = new List<Points>();
 
         DBPoint dbPoint = new DBPoint();
@@ -65,25 +65,23 @@ namespace Map
 
             LoadData();
 
-            //Заполнение листа точками
-            for (int i = 0; i < dgTech.Rows.Count - 1; i++)
-                point.Add(new Points(Convert.ToString(dt.Rows[i][0]), Convert.ToInt32(dt.Rows[i][1]), Convert.ToDouble(dt.Rows[i][2]), Convert.ToDouble(dt.Rows[i][3])));
-            
             //Контекстное меню
             gMap.ContextMenuStrip = contextMenuMap; //Ассоциация контекстного меню
         }
+
+
 
         //Получение основных данных
         private void LoadData()
         {
             //Очистка таблицы
-            //dgTech.Rows.Clear();
+            dt.Clear();
             while (dgTech.Rows.Count > 1)
                 for (int i = 0; i < dgTech.Rows.Count - 1; i++)
                     dgTech.Rows.Remove(dgTech.Rows[i]);
 
-            //Команда для получения основынх данных из БД
-            command = new MySqlCommand("SELECT tech.nameTech AS nameTech, coordinates_of_points.quantity AS quantity, coordinates_of_points.coordinateX AS coordinateX, coordinates_of_points.coordinateY AS coordinateY FROM coordinates_of_points INNER JOIN tech ON coordinates_of_points.idTech = tech.idTech", dbPoint.getConnection());
+            //Команда для получения основных данных из БД
+            command = new MySqlCommand("SELECT tech.nameTech AS nameTech, coordinates_of_points.quantity AS quantity, coordinates_of_points.coordinateX AS coordinateX, coordinates_of_points.coordinateY AS coordinateY, coordinates_of_points.idPoint AS id FROM coordinates_of_points INNER JOIN tech ON coordinates_of_points.idTech = tech.idTech", dbPoint.getConnection());
 
             //Выполнение запроса и заполнение данных
             adapter.SelectCommand = command;
@@ -95,31 +93,52 @@ namespace Map
             dgTech.Columns[1].HeaderText = "Количество";
             dgTech.Columns[2].HeaderText = "Координата X";
             dgTech.Columns[3].HeaderText = "Координата Y";
+            dgTech.Columns["id"].Visible = false;
+
+            //Заполнение листа точками
+            point.Clear();
+            for (int i = 0; i < dgTech.Rows.Count - 1; i++)
+                point.Add(new Points(Convert.ToInt32(dt.Rows[i][4]), Convert.ToString(dt.Rows[i][0]), Convert.ToInt32(dt.Rows[i][1]), Convert.ToDouble(dt.Rows[i][2]), Convert.ToDouble(dt.Rows[i][3])));
         }
+
+
 
         //КНОПКИ КНОПКИ КНОПКИ КНОПКИ КНОПКИ КНОПКИ КНОПКИ КНОПКИ КНОПКИ КНОПКИ КНОПКИ КНОПКИ КНОПКИ КНОПКИ КНОПКИ КНОПКИ КНОПКИ КНОПКИ
         //Добавление метки
         private void bAddPoint_Click(object sender, EventArgs e)
         {
-            addPoint();
+            FormAddPoint fAddPoint = new FormAddPoint("Добавить новую метку");
+            addPoint(fAddPoint);
         }
 
+        //Обновление метки
         private void bUpdPoint_Click(object sender, EventArgs e)
         {
-
+            FormAddPoint fUpdPoint = new FormAddPoint("Изменить метку", point[dgTech.CurrentCell.RowIndex].GetX(), point[dgTech.CurrentCell.RowIndex].GetY(), point[dgTech.CurrentCell.RowIndex].GetQuantity(), point[dgTech.CurrentCell.RowIndex].GetName(), point[dgTech.CurrentCell.RowIndex].GetID());
+            addPoint(fUpdPoint);
         }
 
         //Удаление метки
         private void bDeletePoint_Click(object sender, EventArgs e)
         {
+            command.CommandType = CommandType.Text;
+            command.CommandText = ("DELETE FROM coordinates_of_points WHERE idPoint = @_id");
+            command.Parameters.Add("@_id", MySqlDbType.Int32).Value = point[dgTech.CurrentCell.RowIndex].GetID();
+            command.Connection = dbPoint.getConnection();
 
+            dbPoint.openConnection();
+            command.ExecuteNonQuery();
+            dbPoint.closeConnection();
+
+            LoadData();
         }
 
         //Добавление метки через контекстное меню
         private void создатьНовуюМеткуToolStripMenuItem_Click(object sender, EventArgs e)
         {
             var latlng = gMap.FromLocalToLatLng(x, y);
-            addPoint(latlng.Lng, latlng.Lat);
+            FormAddPoint fAddPoint = new FormAddPoint("Добавить новую метку", latlng.Lat, latlng.Lng);
+            addPoint(fAddPoint);
         }
 
         //КНОПКИ КНОПКИ КНОПКИ КНОПКИ КНОПКИ КНОПКИ КНОПКИ КНОПКИ КНОПКИ КНОПКИ КНОПКИ КНОПКИ КНОПКИ КНОПКИ КНОПКИ КНОПКИ КНОПКИ КНОПКИ
@@ -127,10 +146,9 @@ namespace Map
 
 
         //Открытие формы с созданием новой метки
-        private void addPoint(double _x = 0, double _y = 0)
+        private void addPoint(FormAddPoint fad)
         {
-            FormAddPoint addPoint = new FormAddPoint(_x, _y);
-            addPoint.ShowDialog();
+            fad.ShowDialog();
 
             LoadData();
         }
@@ -144,11 +162,11 @@ namespace Map
             gMap.Overlays.Add(layHel);
             if (cbHel.Checked)
             {
-                for (int i = 0; i < dt.Rows.Count; i++)
-                    if (Convert.ToString(dt.Rows[i][0]) == "Геллион")
+                for (int i = 0; i < point.Count; i++)
+                    if (point[i].GetName() == "Геллион")
                     {
                         Bitmap b = new Bitmap(@"Icons/hellion.png");
-                        GMarkerGoogle marker = new GMarkerGoogle(new PointLatLng(Convert.ToDouble(dt.Rows[i][2]), Convert.ToDouble(dt.Rows[i][3])), new Bitmap(b, new Size(80, 80)));
+                        GMarkerGoogle marker = new GMarkerGoogle(new PointLatLng(point[i].GetX(), point[i].GetY()), new Bitmap(b, new Size(80, 80)));
                         marker.ToolTip = new GMapRoundedToolTip(marker);
                         marker.ToolTipText = Convert.ToString(dt.Rows[i][0]) + " " + Convert.ToString(dt.Rows[i][1]);
                         layHel.Markers.Add(marker);
@@ -166,11 +184,11 @@ namespace Map
             gMap.Overlays.Add(layBatCr);
             if (cbBatCr.Checked)
             {
-                for (int i = 0; i < dt.Rows.Count; i++)
-                    if (Convert.ToString(dt.Rows[i][0]) == "Линейный Крейсер")
+                for (int i = 0; i < point.Count; i++)
+                    if (point[i].GetName() == "Линейный Крейсер")
                     {
                         Bitmap b = new Bitmap(@"Icons/battlecruiser.png");
-                        GMarkerGoogle marker = new GMarkerGoogle(new PointLatLng(Convert.ToDouble(dt.Rows[i][2]), Convert.ToDouble(dt.Rows[i][3])), new Bitmap(b, new Size(80, 80)));
+                        GMarkerGoogle marker = new GMarkerGoogle(new PointLatLng(point[i].GetX(), point[i].GetY()), new Bitmap(b, new Size(80, 80)));
                         marker.ToolTip = new GMapRoundedToolTip(marker);
                         marker.ToolTipText = Convert.ToString(dt.Rows[i][0]) + " " + Convert.ToString(dt.Rows[i][1]);
                         layBatCr.Markers.Add(marker);
@@ -188,11 +206,11 @@ namespace Map
             gMap.Overlays.Add(layMed);
             if (cbMed.Checked)
             {
-                for (int i = 0; i < dt.Rows.Count; i++)
-                    if (Convert.ToString(dt.Rows[i][0]) == "Медивак")
+                for (int i = 0; i < point.Count; i++)
+                    if (point[i].GetName() == "Медивак")
                     {
                         Bitmap b = new Bitmap(@"Icons/medivac.png");
-                        GMarkerGoogle marker = new GMarkerGoogle(new PointLatLng(Convert.ToDouble(dt.Rows[i][2]), Convert.ToDouble(dt.Rows[i][3])), new Bitmap(b, new Size(80, 80)));
+                        GMarkerGoogle marker = new GMarkerGoogle(new PointLatLng(point[i].GetX(), point[i].GetY()), new Bitmap(b, new Size(80, 80)));
                         marker.ToolTip = new GMapRoundedToolTip(marker);
                         marker.ToolTipText = Convert.ToString(dt.Rows[i][0]) + " " + Convert.ToString(dt.Rows[i][1]);
                         layMed.Markers.Add(marker);
@@ -210,11 +228,11 @@ namespace Map
             gMap.Overlays.Add(layMinWid);
             if (cbMinWid.Checked)
             {
-                for (int i = 0; i < dt.Rows.Count; i++)
-                    if (Convert.ToString(dt.Rows[i][0]) == "Мина Вдова")
+                for (int i = 0; i < point.Count; i++)
+                    if (point[i].GetName() == "Мина Вдова")
                     {
                         Bitmap b = new Bitmap(@"Icons/mina.png");
-                        GMarkerGoogle marker = new GMarkerGoogle(new PointLatLng(Convert.ToDouble(dt.Rows[i][2]), Convert.ToDouble(dt.Rows[i][3])), new Bitmap(b, new Size(80, 80)));
+                        GMarkerGoogle marker = new GMarkerGoogle(new PointLatLng(point[i].GetX(), point[i].GetY()), new Bitmap(b, new Size(80, 80)));
                         marker.ToolTip = new GMapRoundedToolTip(marker);
                         marker.ToolTipText = Convert.ToString(dt.Rows[i][0]) + " " + Convert.ToString(dt.Rows[i][1]);
                         layMinWid.Markers.Add(marker);
@@ -232,11 +250,11 @@ namespace Map
             gMap.Overlays.Add(laySiTan);
             if (cbSiTan.Checked)
             {
-                for (int i = 0; i < dt.Rows.Count; i++)
-                    if (Convert.ToString(dt.Rows[i][0]) == "Осадный Танк")
+                for(int i = 0; i < point.Count; i++)
+                    if (point[i].GetName() == "Осадный Танк")
                     {
                         Bitmap b = new Bitmap(@"Icons/siege tank.png");
-                        GMarkerGoogle marker = new GMarkerGoogle(new PointLatLng(Convert.ToDouble(dt.Rows[i][2]), Convert.ToDouble(dt.Rows[i][3])), new Bitmap(b, new Size(80,80)));
+                        GMarkerGoogle marker = new GMarkerGoogle(new PointLatLng(point[i].GetX(), point[i].GetY()), new Bitmap(b, new Size(80,80)));
                         marker.ToolTip = new GMapRoundedToolTip(marker);
                         marker.ToolTipText = Convert.ToString(dt.Rows[i][0]) + " " + Convert.ToString(dt.Rows[i][1]);
                         laySiTan.Markers.Add(marker);
@@ -254,11 +272,11 @@ namespace Map
             gMap.Overlays.Add(layThor);
             if (cbThor.Checked)
             {
-                for (int i = 0; i < dt.Rows.Count; i++)
-                    if (Convert.ToString(dt.Rows[i][0]) == "Тор")
+                for (int i = 0; i < point.Count; i++)
+                    if (point[i].GetName() == "Тор")
                     {
                         Bitmap b = new Bitmap(@"Icons/thor.png");
-                        GMarkerGoogle marker = new GMarkerGoogle(new PointLatLng(Convert.ToDouble(dt.Rows[i][2]), Convert.ToDouble(dt.Rows[i][3])), new Bitmap(b, new Size(80, 80)));
+                        GMarkerGoogle marker = new GMarkerGoogle(new PointLatLng(point[i].GetX(), point[i].GetY()), new Bitmap(b, new Size(80, 80)));
                         marker.ToolTip = new GMapRoundedToolTip(marker);
                         marker.ToolTipText = Convert.ToString(dt.Rows[i][0]) + " " + Convert.ToString(dt.Rows[i][1]);
                         layThor.Markers.Add(marker);
@@ -276,11 +294,11 @@ namespace Map
             gMap.Overlays.Add(layHellbat);
             if (cbHellbat.Checked)
             {
-                for (int i = 0; i < dt.Rows.Count; i++)
-                    if (Convert.ToString(dt.Rows[i][0]) == "Хеллбат")
+                for (int i = 0; i < point.Count; i++)
+                    if (point[i].GetName() == "Хеллбат")
                     {
                         Bitmap b = new Bitmap(@"Icons/hellbat.png");
-                        GMarkerGoogle marker = new GMarkerGoogle(new PointLatLng(Convert.ToDouble(dt.Rows[i][2]), Convert.ToDouble(dt.Rows[i][3])), new Bitmap(b, new Size(80, 80)));
+                        GMarkerGoogle marker = new GMarkerGoogle(new PointLatLng(point[i].GetX(), point[i].GetY()), new Bitmap(b, new Size(80, 80)));
                         marker.ToolTip = new GMapRoundedToolTip(marker);
                         marker.ToolTipText = Convert.ToString(dt.Rows[i][0]) + " " + Convert.ToString(dt.Rows[i][1]);
                         layHellbat.Markers.Add(marker);
@@ -298,11 +316,11 @@ namespace Map
             gMap.Overlays.Add(layCyclon);
             if (cbCyclon.Checked)
             {
-                for (int i = 0; i < dt.Rows.Count; i++)
-                    if (Convert.ToString(dt.Rows[i][0]) == "Циклон")
+                for (int i = 0; i < point.Count; i++)
+                    if (point[i].GetName() == "Циклон")
                     {
                         Bitmap b = new Bitmap(@"Icons/cyclon.png");
-                        GMarkerGoogle marker = new GMarkerGoogle(new PointLatLng(Convert.ToDouble(dt.Rows[i][2]), Convert.ToDouble(dt.Rows[i][3])), new Bitmap(b, new Size(80, 80)));
+                        GMarkerGoogle marker = new GMarkerGoogle(new PointLatLng(point[i].GetX(), point[i].GetY()), new Bitmap(b, new Size(80, 80)));
                         marker.ToolTip = new GMapRoundedToolTip(marker);
                         marker.ToolTipText = Convert.ToString(dt.Rows[i][0]) + " " + Convert.ToString(dt.Rows[i][1]);
                         layCyclon.Markers.Add(marker);
@@ -320,16 +338,16 @@ namespace Map
             gMap.Overlays.Add(layVic);
             if (cbVic.Checked)
             {
-                for (int i = 0; i < dgTech.Rows.Count; i++)
-                    if (Convert.ToString(dgTech[0,i]) == "Викинг")
+                for (int i = 0; i < point.Count; i++)
+                    if (point[i].GetName() == "Викинг")
                     {
                         Bitmap b = new Bitmap(@"Icons/viking.png");
-                        GMarkerGoogle marker = new GMarkerGoogle(new PointLatLng(Convert.ToDouble(dt.Rows[i][2]), Convert.ToDouble(dt.Rows[i][3])), new Bitmap(b, new Size(80, 80)));
+                        GMarkerGoogle marker = new GMarkerGoogle(new PointLatLng(point[i].GetX(), point[i].GetY()), new Bitmap(b, new Size(80, 80)));
                         marker.ToolTip = new GMapRoundedToolTip(marker);
                         marker.ToolTipText = Convert.ToString(dt.Rows[i][0]) + " " + Convert.ToString(dt.Rows[i][1]);
                         layVic.Markers.Add(marker);
                     }
-
+                        
                 gMap.Overlays.Add(layVic);
             }
             else
@@ -351,12 +369,33 @@ namespace Map
                 selectMarker.Position = latlng;
 
                 selectMarker = null;
+
+                corX = latlng.Lat;
+                corY = latlng.Lng;
+                command = new MySqlCommand();
+
+                command.CommandType = CommandType.Text;
+                command.CommandText = ("UPDATE coordinates_of_points SET coordinateX = @_x, coordinateY = @_y WHERE coordinateX = @pX");
+                command.Parameters.Add("@_x", MySqlDbType.Double).Value = corX;
+                command.Parameters.Add("@_y", MySqlDbType.Double).Value = corY;
+                command.Parameters.Add("@pX", MySqlDbType.Double).Value = p.Lat;
+                command.Connection = dbPoint.getConnection();
+
+                dbPoint.openConnection();
+                command.ExecuteNonQuery();
+                dbPoint.closeConnection();
+
+                LoadData();
             }
         }
         private void gMap_MouseDown(object sender, MouseEventArgs e)
         {
             if (e.Button == MouseButtons.Left)
-                selectMarker = gMap.Overlays.SelectMany(o => o.Markers).FirstOrDefault(m => m.IsMouseOver == true);
+            {
+                selectMarker = gMap.Overlays.SelectMany(o => o.Markers).FirstOrDefault(m => m.IsMouseOver == true); //Определение выбранного маркера
+                if (selectMarker != null)
+                    p = selectMarker.Position;
+            }
             if (e.Button == MouseButtons.Right)
             {
                 x = e.X;
